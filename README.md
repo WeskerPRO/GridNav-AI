@@ -90,8 +90,8 @@ pip install -r requirements.txt
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/ResNet-Grid-Pathfinder.git
-cd ResNet-Grid-Pathfinder
+git clone https://github.com/WeskerPRO/GridNav-AI.git
+cd GridNav-AI
 ```
 
 ### 2. Install dependencies
