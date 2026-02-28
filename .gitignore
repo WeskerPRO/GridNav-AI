@@ -210,3 +210,5 @@ __marimo__/
 *.pth          
 __pycache__/
 models/
+src/gif_generator.py
+examples/robot_animation_*.gif

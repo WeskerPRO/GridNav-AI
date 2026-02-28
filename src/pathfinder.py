@@ -476,7 +476,7 @@ def simulate_robot_movement(model, initial_grid_data_list, max_steps=50, model_n
     
     return path_taken, frames
 
-def animate_path(frames, title_suffix=""):
+def animate_path(frames, title_suffix="", gif_index=0):
     """Creates a matplotlib animation of the robot's path."""
     if not frames:
         print("No frames to animate.")
@@ -507,7 +507,7 @@ def animate_path(frames, title_suffix=""):
     # --- MODIFIED 'FuncAnimation' CALL ---
     # Pass 'range(len(frames))' as the frames argument so 'update' receives indices
     ani = animation.FuncAnimation(fig, update, frames=range(len(frames)), repeat=False, interval=500)
-    animation_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'robot_animation.gif')
+    animation_path = os.path.join(os.path.dirname(__file__), '..', 'examples', f'robot_animation_{gif_index}.gif')
     ani.save(animation_path, writer='pillow', fps=2)
     plt.show()
 
@@ -584,7 +584,7 @@ if __name__ == "__main__":
     plt.show()
 
     # Generate a new solvable map for testing
-    for _ in range(10): # Repeat 10 times so I want to see how error is processing
+    for i in range(10): # Repeat 10 times so I want to see how error is processing
         temp_grid_list, _, _, _, _ = generate_random_grid(MAP_ROWS, MAP_COLS, OBSTACLE_DENSITY)
         
         if temp_grid_list is None:
@@ -594,6 +594,6 @@ if __name__ == "__main__":
             if path_taken_new:
                 print("Path taken by TRAINED model on NEW random grid:")
                 print(path_taken_new)
-                animate_path(animation_frames_new, title_suffix="(New Random Grid)")
+                animate_path(animation_frames_new, title_suffix="(New Random Grid)", gif_index=i)
             else:
                 print("Trained model failed to find a path on new random grid or simulation aborted.")
