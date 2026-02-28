@@ -51,7 +51,7 @@ Output: 8 possible moves
 | Metric | Value |
 |--------|-------|
 | Training Maps | 5,000 |
-| Grid Size | 20 x 20 |
+| Grid Size | 15x15 |
 | Obstacle Density | 25% |
 | Epochs | 50 (early stopping) |
 | Optimizer | Adam |
