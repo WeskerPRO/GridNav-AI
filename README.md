@@ -46,7 +46,7 @@ Output: 8 possible moves
 
 ## Training Results
 
-![Training Curves](examples/training_curves.png)
+![Training Curves](examples/training_history.png)
 
 | Metric | Value |
 |--------|-------|

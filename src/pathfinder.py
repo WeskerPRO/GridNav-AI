@@ -524,7 +524,7 @@ if __name__ == "__main__":
     VALIDATION_SPLIT = 0.2 # 20% of data for validation
     os.makedirs(os.path.join(os.path.dirname(__file__), '..', 'models'), exist_ok=True) # Ensure models directory exists
     MODEL_SAVE_FILE = os.path.join(os.path.dirname(__file__), '..', 'models', 'path_prediction_mlp.pth')
-    PATIENCE = 7
+    PATIENCE = 7 # Early stopping patience
     WEIGHT_DECAY = 5e-3
     # --- 1. Generate Dataset ---
     dataset = PathfindingDataset(NUM_TRAINING_MAPS, MAP_ROWS, MAP_COLS, OBSTACLE_DENSITY)
