@@ -10,6 +10,7 @@ import os
 from torch.utils.data import DataLoader, random_split # Import for data splitting
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
+
 '''
 initial_grid_data = [
     [0, 0, 0, 0 , 0, 0, "T"],
@@ -515,16 +516,16 @@ def animate_path(frames, title_suffix=""):
 if __name__ == "__main__":
     # --- Configuration for Training ---
     NUM_TRAINING_MAPS = 5000 # Increased for better training
-    MAP_ROWS, MAP_COLS = 20, 20
+    MAP_ROWS, MAP_COLS = 15, 15 # Increased map size for more complex pathfinding
     OBSTACLE_DENSITY = 0.25
     NUM_EPOCHS = 50 # Can increase if needed
     BATCH_SIZE = 16 # 2^N where N > 1
-    LEARNING_RATE = 1e-5
+    LEARNING_RATE = 5e-4
     VALIDATION_SPLIT = 0.2 # 20% of data for validation
     os.makedirs(os.path.join(os.path.dirname(__file__), '..', 'models'), exist_ok=True) # Ensure models directory exists
     MODEL_SAVE_FILE = os.path.join(os.path.dirname(__file__), '..', 'models', 'path_prediction_mlp.pth')
     PATIENCE = 7
-    WEIGHT_DECAY = 1e-3
+    WEIGHT_DECAY = 5e-3
     # --- 1. Generate Dataset ---
     dataset = PathfindingDataset(NUM_TRAINING_MAPS, MAP_ROWS, MAP_COLS, OBSTACLE_DENSITY)
     # --- 2. Initialize Model ---
@@ -577,6 +578,7 @@ if __name__ == "__main__":
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
+    os.makedirs(os.path.join(os.path.dirname(__file__), '..', 'examples'), exist_ok=True) # Ensure examples directory exists
     training_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'training_history.png')
     plt.savefig(training_path)
     plt.show()
