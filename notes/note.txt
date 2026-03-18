@@ -1,0 +1,151 @@
+if len(replay_buffer) >= MIN_BUFFER:
+    # train here
+```
+
+Imagine you just started training. Buffer has 5 experiences:
+```
+experience 1: robot went UP, hit wall, reward=-0.01
+experience 2: robot went RIGHT, free cell, reward=-0.005
+experience 3: robot went UP, hit wall, reward=-0.01
+experience 4: robot went LEFT, free cell, reward=-0.005
+experience 5: robot went UP, hit wall, reward=-0.01
+```
+
+If you train on this:
+```
+batch of 5 → 3 out of 5 samples say "UP is bad"
+network immediately learns "never go UP"
+but UP might be the correct direction toward target
+network learned a wrong policy from 5 unlucky samples
+```
+
+With `MIN_BUFFER = 1000`:
+```
+wait until 1000 experiences collected
+buffer has UP/DOWN/LEFT/RIGHT from many different positions
+batch of 32 samples = diverse, representative
+network learns from balanced data
+```
+
+Supervised learning equivalent:
+```
+you wouldn't train a classifier on 5 images
+you wait until you have enough data first
+MIN_BUFFER = minimum dataset size before training starts
+```
+
+---
+
+## Why `replay_buffer.sample(BATCH_SIZE)`
+
+The buffer stores experiences in order they happened:
+```
+step 1:  (state_1, UP,    -0.01, state_2, False)
+step 2:  (state_2, RIGHT, -0.005, state_3, False)
+step 3:  (state_3, RIGHT, -0.005, state_4, False)
+step 4:  (state_4, RIGHT, +0.01, state_5, False)
+step 5:  (state_5, RIGHT, +0.01, state_6, False)
+...
+```
+
+If you train on consecutive steps in order:
+```
+problem 1 — correlation:
+    step 2,3,4,5 are all RIGHT in similar positions
+    network sees RIGHT→RIGHT→RIGHT→RIGHT
+    thinks RIGHT is always correct regardless of position
+    overfits to recent trajectory
+
+problem 2 — catastrophic forgetting:
+    episode 1: robot explored top-left corner
+    episode 2: robot explored bottom-right corner
+    training only on episode 2 → forgets episode 1 completely
+    next time robot is in top-left → has no idea what to do
+```
+
+`.sample(BATCH_SIZE)` picks 32 **random** experiences from entire buffer:
+```
+random sample might contain:
+    experience from episode 1, step 14  (top-left corner)
+    experience from episode 47, step 3  (near start)
+    experience from episode 23, step 89 (near target)
+    experience from episode 8, step 31  (bottom-right)
+    ...
+
+diverse, uncorrelated → network learns general policy
+not biased toward recent trajectory
+```
+
+Supervised equivalent:
+```
+DataLoader with shuffle=True
+you never train on data in the exact order it was collected
+always randomize to break correlations
+```
+
+---
+
+## Why `BUFFER_SIZE` matters
+
+The buffer is a `deque(maxlen=BUFFER_SIZE)`. When full, oldest experience is deleted to make room for newest:
+```
+BUFFER_SIZE = 50000
+
+episode 1-500:    buffer fills up to 50000 experiences
+episode 501:      new experience added → oldest experience deleted
+                  buffer always contains most recent 50000 experiences
+```
+
+**Too small buffer:**
+```
+BUFFER_SIZE = 100
+
+episode 1:   robot near top-left  → 100 experiences stored
+episode 2:   robot near bottom    → overwrites all episode 1 experiences
+episode 3:   robot near top-left  → overwrites all episode 2 experiences
+
+buffer only remembers last 2 episodes
+network forgets everything older than that
+catastrophic forgetting ← same problem as no shuffle
+```
+
+**Too large buffer:**
+```
+BUFFER_SIZE = 5000000
+
+stores experiences from episode 1 forever
+but robot in episode 3000 is much smarter than episode 1
+early experiences show bad random policy
+network keeps learning from outdated bad behavior
+old wrong experiences corrupt new good learning
+```
+
+**Correct buffer size:**
+```
+BUFFER_SIZE = 50000
+
+large enough:   covers many diverse situations
+small enough:   old bad experiences eventually deleted
+sweet spot:     diverse + current + manageable memory
+```
+
+---
+
+## All three together — the full picture
+```
+MIN_BUFFER:    don't train until data is diverse enough
+               "minimum dataset size"
+
+.sample():     break temporal correlation between experiences
+               "shuffle=True equivalent"
+
+BUFFER_SIZE:   balance diversity vs recency
+               "how much of history to remember"
+```
+
+They solve the same fundamental problem from three angles:
+```
+RL generates data sequentially → highly correlated → bad for neural networks
+MIN_BUFFER  → wait for diversity before training
+sample()    → randomize what you train on
+BUFFER_SIZE → control how old your training data can get

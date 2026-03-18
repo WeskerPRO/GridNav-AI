@@ -130,7 +130,6 @@ python pathfinder.py
 - ✅ Live robot navigation animation
 
 ### 🚧 Upcoming
-- [ ] Reinforcement Learning version (Q-Learning / DQN)
 - [ ] Larger and more complex grid support
 - [ ] Web demo (Streamlit or Gradio)
 - [ ] 3D grid pathfinding

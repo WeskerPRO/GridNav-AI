@@ -206,9 +206,12 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Model weights and checkpoints
+# Custom ignores for this project
 *.pth          
 __pycache__/
 models/
 src/gif_generator.py
-examples/robot_animation_*.gif
+src/reinforcement_lesson_*.py
+examples/robot_animation_*.gif   
+examples/ql_robot_animation.gif
+# Ignore all generated animation GIFs

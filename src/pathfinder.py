@@ -20,6 +20,12 @@ initial_grid_data = [
     [0, 0, 0, 0,  0,  0,  0],
     [0, 0, 0, 0,  0,  0,  0],
 ]
+
+Wow, that is I remembered, thanks, I got the idea,
+If we don't show robot_pos, target_pos and obstacles along with correct answer where to move first, the machine does not know what to learn.
+It is like we are telling it, this is (features: (robot_pos, target_pos, obstacles), 
+correct answers: (1, 1) move forward) in order to make it learn, after learning, 
+it will have robot_pos, target_pos, obstacles, but not correct answers, it will try to guess it
 '''
 
 CELL_TYPES = {
@@ -65,6 +71,10 @@ def find_elements(grid_numeric, robot_val=CELL_TYPES["R"], target_val=CELL_TYPES
                 robot_pos = (r, c)
             elif grid_numeric[r, c] == target_val:
                 target_pos = (r, c)
+        
+        if robot_pos is not None and target_pos is not None: # both found earlier, no need to waste time
+            break
+
     return robot_pos, target_pos
 
 def is_valid_move(grid_numeric, r, c, obstacle_val=CELL_TYPES[3]):
@@ -83,8 +93,8 @@ def find_shortest_path_bfs(grid_numeric, start_pos, target_pos):
     """
     rows, cols = grid_numeric.shape
     
-    queue = deque([(start_pos, [start_pos])]) # (current_pos, current_path)
-    visited = {start_pos}
+    queue = deque([(start_pos, [start_pos])]) # (current_pos, current_path) # Store the path taken to reach current_pos
+    visited = {start_pos} # Set to track visited positions to avoid cycles
 
     while queue:
         (r, c), path = queue.popleft()
@@ -100,32 +110,32 @@ def find_shortest_path_bfs(grid_numeric, start_pos, target_pos):
     
     return None # No path found
 
-def get_input_state_cnn(grid_numeric, robot_current_pos, target_pos):
+def get_input_state_cnn(grid_numeric, robot_current_pos, target_pos): 
     """
     Constructs the input tensor for the CNN from the current grid state.
-    Returns a tensor with shape: [1, num_channels, height, width]
+    Returns a tensor with shape: [1, num_channels, height, width] follows [b, c, h, w] format expected by PyTorch models.
     """
-    rows, cols = grid_numeric.shape
+    rows, cols = grid_numeric.shape 
     
     # Initialize channels
-    map_channel = np.zeros_like(grid_numeric)
-    robot_channel = np.zeros_like(grid_numeric)
-    target_channel = np.zeros_like(grid_numeric)
+    map_channel = np.zeros_like(grid_numeric) # Map channel
+    robot_channel = np.zeros_like(grid_numeric) # Robot channel
+    target_channel = np.zeros_like(grid_numeric) # Target channel
 
     # Populate map channel (obstacles)
-    map_channel[grid_numeric == CELL_TYPES[3]] = 1.0 # Obstacles are 1.0
+    map_channel[grid_numeric == CELL_TYPES[3]] = 1.0 # Mark obstacles in the map channel as 1.0, others remain 0.0
 
     # Populate robot channel
-    robot_channel[robot_current_pos[0], robot_current_pos[1]] = 1.0
+    robot_channel[robot_current_pos[0], robot_current_pos[1]] = 1.0 # Mark the robot's current position as 1.0 in the robot channel
 
     # Populate target channel
-    target_channel[target_pos[0], target_pos[1]] = 1.0
+    target_channel[target_pos[0], target_pos[1]] = 1.0 # Mark the target's position as 1.0 in the target channel
 
     # Stack channels to form the input (num_channels, height, width)
-    input_channels = np.stack([map_channel, robot_channel, target_channel], axis=0)
+    input_channels = np.stack([map_channel, robot_channel, target_channel], axis=0) # Shape: (3, rows, cols)
 
-    # Add batch dimension: (1, num_channels, height, width)
-    return torch.tensor(input_channels, dtype=torch.float32).unsqueeze(0)
+    # Add batch dimension: The model expects input of shape [batch_size, num_channels, height, width], so we unsqueeze to add the batch dimension.
+    return torch.tensor(input_channels, dtype=torch.float32).unsqueeze(0) # Unify the return statement to always return a 4D tensor with batch dimension, even if it's just one example (batch size of 1).
 
 
 
@@ -146,12 +156,12 @@ def generate_random_grid(rows, cols, obstacle_density=0.2):
                 if random.random() < obstacle_density:
                     grid_data[r][c] = 3 # Mark as obstacle
 
-        # Place Robot and Target randomly
-        all_coords = [(r, c) for r in range(rows) for c in range(cols)]
-        random.shuffle(all_coords)
+        # Place Robot and Target randomly -- Transform grid to numeric coordinates for easier placement
+        all_coords = [(r, c) for r in range(rows) for c in range(cols)] # List of all coordinates
+        random.shuffle(all_coords) # Shuffle to ensure random placement each time
 
-        robot_pos = None
-        target_pos = None
+        robot_pos = None # To store the robot's position once placed
+        target_pos = None # To store the target's position once placed
 
         for r_c in all_coords:
             if grid_data[r_c[0]][r_c[1]] == 0: # If empty
@@ -182,9 +192,9 @@ def generate_random_grid(rows, cols, obstacle_density=0.2):
 class PathfindingDataset(torch.utils.data.Dataset):
     def __init__(self, num_maps=1000, map_rows=6, map_cols=7, obstacle_density=0.2):
         self.data = [] # List of (input_state_tensor, optimal_action_label) pairs
-        print(f"Generating {num_maps} random maps for dataset...")
+        print(f"Generating {num_maps} random maps for dataset...") 
         
-        for i in range(num_maps):
+        for i in range(num_maps): 
             grid_data, numeric_grid, optimal_path, robot_start_pos, target_pos = \
                 generate_random_grid(map_rows, map_cols, obstacle_density)
             
@@ -196,16 +206,16 @@ class PathfindingDataset(torch.utils.data.Dataset):
                 current_robot_pos = optimal_path[j]
                 next_optimal_pos = optimal_path[j+1]
 
-                dr = next_optimal_pos[0] - current_robot_pos[0]
-                dc = next_optimal_pos[1] - current_robot_pos[1]
+                dr = next_optimal_pos[0] - current_robot_pos[0] # Row change (next row - current row)
+                dc = next_optimal_pos[1] - current_robot_pos[1] # Column change (next col - current col)
 
-                optimal_action_label = -1
-                for idx, (adir, adic) in enumerate(ACTION_VECTORS):
+                optimal_action_label = -1 # Initialize with an invalid label to check if we find a match
+                for idx, (adir, adic) in enumerate(ACTION_VECTORS): # Check which action corresponds to the optimal move
                     if dr == adir and dc == adic:
                         optimal_action_label = idx
                         break
                 
-                if optimal_action_label != -1:
+                if optimal_action_label != -1: # Valid action found
                     # Note: get_input_state returns unsqueezed tensor, but Dataset expects 1D.
                     # We'll unsqueeze in DataLoader's collate_fn or directly in forward pass for batch.
                     # For simplicity, here, we get the 1D tensor:
@@ -222,7 +232,7 @@ class PathfindingDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.data)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx): # train_dataloader will call this to get the input and label for each example
         return self.data[idx]
 
 # No separate ResidualBlock class needed for this unified approach
