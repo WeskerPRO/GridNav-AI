@@ -211,7 +211,6 @@ __marimo__/
 __pycache__/
 models/
 src/gif_generator.py
-src/reinforcement_lesson_*.py
 examples/robot_animation_*.gif   
 examples/ql_robot_animation.gif
 # Ignore all generated animation GIFs
