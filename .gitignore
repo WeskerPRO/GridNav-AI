@@ -211,6 +211,6 @@ __marimo__/
 __pycache__/
 models/
 src/gif_generator.py
-examples/robot_animation_*.gif   
-examples/ql_robot_animation.gif
+examples/
+.claude
 # Ignore all generated animation GIFs

@@ -238,7 +238,7 @@ with st.expander("ℹ️  About GridNav", expanded=False):
     | **How it learns** | Imitates BFS optimal paths | Trial and error with rewards |
     | **Needs labels?** | ✅ Yes (BFS solutions) | ❌ No |
     | **Model** | ResNet CNN | DQN-LSTM |
-    | **State** | Full grid (3-channel tensor) | 5×5 vision window |
+    | **State** | Full grid (3-channel tensor) | 7×7 vision window |
     | **Actions** | 8 directions | 4 directions |
     | **Convergence** | Fast | Slower but more general |
 

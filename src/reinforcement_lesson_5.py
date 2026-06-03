@@ -29,11 +29,22 @@ ACTIONS = {
 }
 
 NUM_ACTIONS = len(ACTIONS)
-WINDOW_SIZE  = 5
+WINDOW_SIZE = 7
 WINDOW_CELLS = WINDOW_SIZE * WINDOW_SIZE   # = 25
 INPUT_DIM = WINDOW_CELLS + 5            # 25 (window) + pos_r + pos_c + tgt_r + tgt_c + explored
                                            # was 28 (window + pos_r + pos_c + explored)
                                            # now 30 — target coords added for generalization
+
+# =============================================================================
+# REWARD SHAPING CONFIG  — tune these and compare eval success
+# =============================================================================
+REWARD_GOAL = 1.0      # reaching the target (terminal)
+REWARD_COLLISION = -0.01    # hitting a wall / obstacle / out of bounds (no move)
+STEP_COST = -0.005   # per-step penalty (encourages shorter paths)
+SHAPING_COEF = 0.01     # potential-based: (prev_dist - new_dist) * COEF
+REVISIT_PENALTY = -0.02    # stepping onto an already-visited cell
+TIMEOUT_PENALTY = -0.25    # applied to the final transition if MAX_STEPS hit
+                            # without reaching the goal. Set to 0.0 to disable.
 
 def get_grid_numeric(grid_data):
     numeric_grid = np.zeros((len(grid_data), len(grid_data[0])), dtype=np.float32)
@@ -137,27 +148,27 @@ class GridEnvironmentStage3:
         rows, cols = self.numeric_grid.shape
 
         if not (0 <= nr < rows and 0 <= nc < cols):
-            return self.robot_pos, -0.01, False
+            return self.robot_pos, REWARD_COLLISION, False
         if self.numeric_grid[nr, nc] == 1.0:
-            return self.robot_pos, -0.01, False
+            return self.robot_pos, REWARD_COLLISION, False
 
         prev_dist = abs(r  - self.target_pos[0]) + abs(c  - self.target_pos[1])
         self.robot_pos = (nr, nc)
         new_dist = abs(nr - self.target_pos[0]) + abs(nc - self.target_pos[1])
 
         if self.robot_pos == self.target_pos:
-            return self.robot_pos, +1.0, True
+            return self.robot_pos, REWARD_GOAL, True
 
-        shaping = (prev_dist - new_dist) * 0.01
+        shaping = (prev_dist - new_dist) * SHAPING_COEF
 
         if self.robot_pos in self.visited:
-            revisit_penalty = -0.02
+            revisit_penalty = REVISIT_PENALTY
         else:
             revisit_penalty = 0.0
 
         self.visited.add(self.robot_pos)
 
-        return self.robot_pos, -0.005 + shaping + revisit_penalty, False
+        return self.robot_pos, STEP_COST + shaping + revisit_penalty, False
 
 
 # =============================================================================
@@ -297,7 +308,7 @@ def create_eval_set(rows, cols, n_grids=50, density_min=0.10, density_max=0.35):
     eval_grids = []
     while len(eval_grids) < n_grids:
         density = random.uniform(density_min, density_max)
-        result  = generate_random_grid(rows, cols, density)
+        result = generate_random_grid(rows, cols, density)
         _, numeric, _, robot_start, target = result
 
         if numeric is not None:
@@ -349,6 +360,95 @@ def evaluate_on_fixed_set(model, eval_grids, rows, cols):
 
     model.train()
     return success_count / len(eval_grids) * 100
+
+
+def diagnose_eval_set(model, eval_grids, rows, cols, n_buckets=3):
+    """
+    Diagnostic breakdown of eval performance — read-only, does NOT affect training.
+
+    Runs the same greedy rollout as evaluate_on_fixed_set, but records per grid:
+        density  : obstacle fraction (numeric.mean(), since obstacles=1.0/free=0.0)
+        outcome  : "success" | "deadlock" (stuck oscillating) | "timeout"
+
+    Then buckets grids by density and prints success / failure-type per bucket:
+        deadlock-heavy on dense grids  -> observability limit (try larger window)
+        timeout-heavy buckets          -> step budget too small (raise MAX_STEPS)
+    """
+    device = next(model.parameters()).device
+    was_training = model.training
+    model.eval()
+
+    path_length = (rows - 1) + (cols - 1)
+    MAX_STEPS = path_length * 3 + 5
+
+    records = []   # list of (density, outcome)
+    for numeric, robot_start, target in eval_grids:
+        env = GridEnvironmentStage3(numeric, robot_start, target)
+        raw_pos = env.reset()
+        state = get_state(raw_pos, env.numeric_grid, env.target_pos, rows, cols, env.visited)
+        h, c = model.init_hidden(batch_size=1, device=device)
+        recent = deque(maxlen=10)
+
+        outcome = "timeout"   # default if the loop exhausts without done/deadlock
+        for _ in range(MAX_STEPS):
+            state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
+            with torch.no_grad():
+                q_vals, h, c = model(state_t, h, c)
+                action = torch.argmax(q_vals).item()
+            h = h.detach()
+            c = c.detach()
+
+            new_raw, _, done = env.step(action)
+            state = get_state(new_raw, env.numeric_grid, env.target_pos, rows, cols, env.visited)
+            recent.append(env.robot_pos)
+
+            if len(recent) == 10 and len(set(recent)) <= 2:
+                outcome = "deadlock"
+                break
+            if done:
+                outcome = "success"
+                break
+
+        records.append((float(numeric.mean()), outcome))
+
+    if was_training:
+        model.train()
+
+    # ── bucket by density (equal-width bins over the observed range) ───────────
+    densities = [d for d, _ in records]
+    lo, hi = min(densities), max(densities)
+    span = (hi - lo) or 1e-9
+    buckets = [[] for _ in range(n_buckets)]
+    for d, outcome in records:
+        idx = min(int((d - lo) / span * n_buckets), n_buckets - 1)  # clamp max into last bin
+        buckets[idx].append(outcome)
+
+    # ── print table ────────────────────────────────────────────────────────────
+    def fmt_row(label, n, s, t, dl):
+        sr = f"{s / n * 100:.0f}%" if n else "—"
+        return f"{label:<14}{n:>4}{sr:>9}{t:>9}{dl:>10}"
+
+    N = len(records)
+    print("\n" + "=" * 46)
+    print("  EVAL DIAGNOSTIC — outcome by grid density")
+    print("=" * 46)
+    print(f"{'Density':<14}{'n':>4}{'success':>9}{'timeout':>9}{'deadlock':>10}")
+    print("-" * 46)
+    tot_s = tot_t = tot_d = 0
+    for i in range(n_buckets):
+        b = buckets[i]
+        s, t, dl = b.count("success"), b.count("timeout"), b.count("deadlock")
+        tot_s, tot_t, tot_d = tot_s + s, tot_t + t, tot_d + dl
+        b_lo = lo + span * i / n_buckets
+        b_hi = lo + span * (i + 1) / n_buckets
+        print(fmt_row(f"{b_lo:.0%}-{b_hi:.0%}", len(b), s, t, dl))
+    print("-" * 46)
+    print(fmt_row("OVERALL", N, tot_s, tot_t, tot_d))
+    print("=" * 46)
+    print("deadlock-heavy on dense grids -> observability (bigger window)")
+    print("timeout-heavy                 -> raise MAX_STEPS\n")
+
+    return records
 
 
 # =============================================================================
@@ -481,7 +581,7 @@ def train_stage3(rows, cols, density_min=0.10, density_max=0.35):
     GAMMA = 0.95
     EPSILON = 1.0
     EPSILON_MIN = 0.05
-    target_ep = int(EPISODES * (2 / 3)) # 2 / 3
+    target_ep = int(EPISODES * (2 / 3)) # 2 / 3 episodes for exploration (ε high) and 1 / 3 for exploitation
     EPSILON_DECAY = (EPSILON_MIN / EPSILON) ** (1 / target_ep)
     BATCH_SIZE = 32
     BUFFER_SIZE = 50000
@@ -532,8 +632,7 @@ def train_stage3(rows, cols, density_min=0.10, density_max=0.35):
         # ── new random grid every episode ────────────────────────────────────
         density = random.uniform(density_min, density_max)
         while True:
-            result = generate_random_grid(rows, cols, density)
-            _, numeric, _, robot_start, target = result
+            _, numeric, _, robot_start, target = generate_random_grid(rows, cols, density)
             if numeric is not None:
                 break
 
@@ -548,7 +647,7 @@ def train_stage3(rows, cols, density_min=0.10, density_max=0.35):
         train_steps  = 0
         done = False
 
-        for _ in range(MAX_STEPS):
+        for step_i in range(MAX_STEPS):
             state_t = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
 
             if random.random() < EPSILON:
@@ -569,6 +668,14 @@ def train_stage3(rows, cols, density_min=0.10, density_max=0.35):
 
             new_state_raw, reward, done = env.step(action)
             new_state = get_state(new_state_raw, env.numeric_grid, env.target_pos, rows, cols, env.visited)
+
+            # timeout: ran out of steps without reaching the goal. Penalize the
+            # final transition and mark it terminal so the penalty isn't washed
+            # out by bootstrapping (GAMMA * max_next_q).
+            if not done and step_i == MAX_STEPS - 1:
+                reward += TIMEOUT_PENALTY
+                done = True
+
             total_reward += reward
 
             replay_buffer.push(state, action, reward, new_state, done)
@@ -811,7 +918,7 @@ if __name__ == "__main__":
     ROWS, COLS = 15, 15
     DENSITY_MIN = 0.10
     DENSITY_MAX = 0.35
-    N_SIM = 5
+    N_SIM = 10
     
     print(f"Grid: {ROWS}×{COLS} | Density: {DENSITY_MIN:.0%}–{DENSITY_MAX:.0%}")
     print(f"INPUT_DIM: {INPUT_DIM} (window={WINDOW_CELLS} + pos=2 + target=2 + explored=1)")
@@ -819,6 +926,10 @@ if __name__ == "__main__":
     os.makedirs("examples", exist_ok=True)
     model, rewards, success_rates = train_stage3(ROWS, COLS, density_min = DENSITY_MIN, density_max = DENSITY_MAX)
     plot_rewards(rewards, success_rates, eval_every=250, rows=ROWS, cols=COLS, title="Stage 3 DQN-LSTM — Random Grids", save_path="examples/stage3_rewards.png")
+
+    # diagnostic: where do failures concentrate? (fresh sample of same distribution)
+    diag_grids = create_eval_set(ROWS, COLS, n_grids=60, density_min=DENSITY_MIN, density_max=DENSITY_MAX)
+    diagnose_eval_set(model, diag_grids, ROWS, COLS, n_buckets=3)
 
     # simulate on a fresh random grid
     print(f"\nSimulating on {N_SIM} random grids...")
