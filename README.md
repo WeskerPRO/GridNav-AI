@@ -1,6 +1,6 @@
 # GridNav-AI 🤖🗺️
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue)
+![Version](https://img.shields.io/badge/version-0.4.0-blue)
 ![Python](https://img.shields.io/badge/python-3.12+-green)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange)
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red)
@@ -236,12 +236,12 @@ The demo has three pages:
 - ✅ Fixed eval set (validation equivalent for RL)
 - ✅ Streamlit demo with live training + inference + grid builder
 - ✅ BPTT sequence training (experimental)
+- ✅ 3D grid pathfinding (experimental)
 
 ### 🚧 In Progress
 - 🔄 Model generalization improvement (target: 80%+ success rate)
 
 ### 📋 Upcoming
-- [ ] 3D grid pathfinding (supervised + RL)
 - [ ] Fog of war exploration (partial map reveal)
 - [ ] Larger grid support (35×35+)
 
