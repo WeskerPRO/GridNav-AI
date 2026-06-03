@@ -94,7 +94,7 @@ Output: 4 Q-values (UP, DOWN, LEFT, RIGHT)
 ## Training Results
 
 ### Supervised Learning
-![Training Curves](examples/training_history.png)
+![Training Curves](notes/training_history.png)
 
 | Metric | Value |
 |--------|-------|
@@ -106,7 +106,7 @@ Output: 4 Q-values (UP, DOWN, LEFT, RIGHT)
 | Loss | CrossEntropyLoss |
 
 ### Reinforcement Learning
-![RL Training Curves](examples/stage3_rewards.png)
+![RL Training Curves](notes/stage3_rewards.png)
 
 | Metric | Value |
 |--------|-------|
