@@ -12,10 +12,10 @@ A robot navigation project exploring two fundamentally different approaches to t
 ## Demo
 
 ### Supervised Learning (ResNet)
-![Robot Navigation](examples/robot_animation.gif)
+![Robot Navigation](notes/robot_animation.gif)
 
 ### Reinforcement Learning (DQN-LSTM)
-![RL Navigation](examples/stage3_animation.gif)
+![RL Navigation](notes/stage3_animation.gif)
 
 ---
 
